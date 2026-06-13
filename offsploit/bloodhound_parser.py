@@ -51,7 +51,7 @@ class BloodHoundParser:
                 # Extract node properties
                 node_props = item.get("Properties", {})
                 node_name = node_props.get("name", "").upper()
-                node_type = node_props.get("domain", "UNKNOWN").upper()
+                node_props.get("domain", "UNKNOWN").upper()
 
                 # Sometime name is just the ID or inside objectId
                 if not node_name:

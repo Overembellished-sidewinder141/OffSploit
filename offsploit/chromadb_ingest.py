@@ -7,6 +7,7 @@ desteğiyle ChromaDB'ye aktarır. Kod bazlı context retention için
 exploit kaynak kodunun ilk bölümünü composite text'e dahil eder.
 """
 
+import contextlib
 import json
 import logging
 import sys
@@ -206,13 +207,11 @@ class Ingestor:
                 )
 
                 if self.progress_callback:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.progress_callback(
                             ingested, total_rows,
                             f"Chunk [{start}-{end - 1}] islendi"
                         )
-                    except Exception:
-                        pass
             except Exception as exc:
                 logger.error(
                     "ChromaDB yazma hatası (chunk %d-%d): %s",

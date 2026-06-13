@@ -92,8 +92,7 @@ class OpenAIProvider(LLMProviderInterface):
             self.client = None
 
     def health_check(self) -> bool:
-        if not self.client: return False
-        return True
+        return self.client
 
     def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.1, max_tokens: int = 4096) -> str:
         if not self.client: raise RuntimeError("OpenAI library not installed.")

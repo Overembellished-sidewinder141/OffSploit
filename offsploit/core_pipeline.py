@@ -60,7 +60,7 @@ class OffSploitPipeline:
         use_swarm: bool | None = None,
         use_docker: bool | None = None,
     ):
-        task_id = str(uuid.uuid4())[:8]
+        str(uuid.uuid4())[:8]
         cfg = self.config
 
         # Feature flag'leri config'den al (eğer parametre verilmemişse)

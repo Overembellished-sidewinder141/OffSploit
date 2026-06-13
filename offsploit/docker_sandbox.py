@@ -7,6 +7,7 @@ derleyip çalıştıran, hata alınırsa stderr'i LLM'e geri besleyerek
 otonom onarım döngüsü sağlayan sandbox modülü.
 """
 
+import contextlib
 import io
 import logging
 import tarfile
@@ -202,10 +203,8 @@ class DockerSandbox:
                 exit_code = result.get("StatusCode", -1)
             except Exception:
                 # Zaman aşımı — container'ı öldür
-                try:
+                with contextlib.suppress(Exception):
                     container.kill()
-                except Exception:
-                    pass
                 return -1, "", "Container zaman aşımına uğradı."
 
             # Logları al
@@ -228,10 +227,8 @@ class DockerSandbox:
         finally:
             # Container temizliği
             if container:
-                try:
+                with contextlib.suppress(Exception):
                     container.remove(force=True)
-                except Exception:
-                    pass
             self._active_containers = max(0, self._active_containers - 1)
 
     def compile_in_sandbox(self, source_code: str, language: str) -> SandboxResult:

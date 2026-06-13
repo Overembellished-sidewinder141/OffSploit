@@ -453,7 +453,7 @@ class SwarmOrchestrator:
                 "status": "running"
             })
 
-            opsec_result = self.opsec_agent.execute({"code": current_code})
+            self.opsec_agent.execute({"code": current_code})
             review = self.opsec_agent.review(current_code)
 
             self._round_history.append({

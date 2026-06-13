@@ -43,13 +43,13 @@ class OffSploitReporter:
 
     def generate_report(self, lhost: str, lport: str, services: list[dict], successful_exploits: list[dict]) -> str:
         """PDF formatında sızma testi sonuç raporu üretir.
-        
+
         Args:
             lhost: Saldırgan IP'si.
             lport: Dinleme portu.
             services: Nmap üzerinden elde edilen açık servisler listesi.
             successful_exploits: Pipeline'dan başarıyla geçen ve uyarlanan exploit'ler.
-            
+
         Returns:
             Oluşturulan PDF dosyasının mutlak yolu. fpdf yüklü değilse None döner.
         """

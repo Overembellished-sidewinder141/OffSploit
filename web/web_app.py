@@ -28,6 +28,8 @@ from werkzeug.utils import secure_filename
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import contextlib
+
 from offsploit.chromadb_ingest import Ingestor
 from offsploit.core_pipeline import OffSploitPipeline
 from offsploit.llm_client import LLMClient
@@ -648,10 +650,8 @@ def handle_pty_input(data: dict):
     if pty_process and pty_process.poll() is None:
         input_data = data.get("input", "")
         if input_data:
-            try:
+            with contextlib.suppress(Exception):
                 os.write(pty_process.stdin.fileno(), input_data.encode("utf-8"))
-            except Exception:
-                pass
 
 @socketio.on("pty_resize")
 def handle_pty_resize(data: dict):
