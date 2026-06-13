@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OffSploit - Autonomous Exploit Adaptation & C2 Framework</title>
+  <meta name="description" content="RAG + Local LLM Powered Penetration Testing Tool">
+  <link rel="icon" href="/static/images/favicon.png" type="image/png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Vis.js for Network Topology -->
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <!-- Xterm.js for Web Terminal -->
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Menu"><i data-lucide="chevron-left"></i></button>
+      <div class="sidebar-brand">
+        <div class="brand-icon"><img src="/static/images/favicon.png" alt="OffSploit Logo"></div>
+        <div class="brand-text">
+          <div class="brand-name"><span>Off</span>Sploit</div>
+          <div class="brand-sub">Exploit Adaptation Tool</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">Ana Menu</div>
+        <a class="nav-item active" data-page="dashboard" id="nav-dashboard">
+          <i data-lucide="layout-dashboard"></i> Dashboard
+        </a>
+        <a class="nav-item" data-page="pipeline" id="nav-pipeline">
+          <i data-lucide="play-circle"></i> Pipeline
+        </a>
+        <a class="nav-item" data-page="search" id="nav-search">
+          <i data-lucide="search"></i> Exploit Arama
+        </a>
+
+        <div class="nav-section">Yonetim</div>
+        <a class="nav-item" data-page="terminal" id="nav-terminal">
+          <i data-lucide="terminal-square"></i> Web Terminal
+        </a>
+        <a class="nav-item" data-page="database" id="nav-database">
+          <i data-lucide="database"></i> Veritabani
+        </a>
+        <a class="nav-item" data-page="settings" id="nav-settings">
+          <i data-lucide="settings"></i> Ayarlar
+        </a>
+        <a class="nav-item" data-page="logs" id="nav-logs">
+          <i data-lucide="terminal"></i> Log Viewer
+        </a>
+      </nav>
+
+      <div class="sidebar-status" id="sidebar-status">
+        <div class="status-row"><span class="status-dot unknown" id="dot-ollama"></span> Ollama</div>
+        <div class="status-row"><span class="status-dot unknown" id="dot-chromadb"></span> ChromaDB</div>
+        <div class="status-row"><span class="status-dot unknown" id="dot-exploitdb"></span> Exploit-DB</div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="main-content">
+
+      <div id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <p>Sistem durumu, topoloji ve aktif baglantilar</p>
+        </div>
+
+        <div class="card mb-24">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="network"></i> Ag Topolojisi & Saldiri Rotasi</div>
+            <button class="btn btn-secondary btn-sm" onclick="drawTopology()"><i data-lucide="refresh-cw"></i> Guncelle</button>
+          </div>
+          <div id="topology-graph" style="height: 350px; background: var(--bg-base); border-radius: var(--radius-sm); border: 1px solid var(--border);"></div>
+        </div>
+
+        <div class="grid-3">
+          <div class="stat-card">
+            <div class="stat-icon cyan"><i data-lucide="server"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-ollama">--</div>
+              <div class="stat-label">Ollama Durumu</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple"><i data-lucide="database"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-db-count">--</div>
+              <div class="stat-label">Exploit Kaydi</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green"><i data-lucide="folder-open"></i></div>
+            <div class="stat-info">
+              <div class="stat-value" id="stat-exploitdb">--</div>
+              <div class="stat-label">Exploit-DB</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="zap"></i> Hizli Islemler</div>
+            </div>
+            <div class="btn-group" style="flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" onclick="navigateTo('pipeline')"><i data-lucide="play"></i> Pipeline Baslat</button>
+              <button class="btn btn-secondary btn-sm" onclick="navigateTo('search')"><i data-lucide="search"></i> Exploit Ara</button>
+              <button class="btn btn-secondary btn-sm" onclick="navigateTo('database')"><i data-lucide="refresh-cw"></i> DB Guncelle</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="clock"></i> Son Islemler</div>
+            </div>
+            <div id="recent-history">
+              <div class="empty-state" style="padding:20px;">
+                <p>Henuz islem yapilmadi</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="activity"></i> Sistem Kaynaklari</div>
+            </div>
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <span class="stat-label">CPU Kullanimi</span>
+                <span class="stat-value" id="sys-cpu-val" style="font-size:12px;">0%</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="sys-cpu-bar" style="width:0%; background:var(--accent);"></div></div>
+            </div>
+            <div class="form-group mt-16">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <span class="stat-label">RAM Kullanimi</span>
+                <span class="stat-value" id="sys-mem-val" style="font-size:12px;">0%</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="sys-mem-bar" style="width:0%; background:var(--warning);"></div></div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="cpu"></i> Ollama Modelleri</div>
+              <button class="btn btn-secondary btn-sm" onclick="refreshModels()"><i data-lucide="refresh-cw"></i></button>
+            </div>
+            <div id="models-list" style="max-height:120px; overflow-y:auto;">
+              <div class="empty-state" style="padding:16px;"><p>Kontrol ediliyor...</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-pipeline" class="page">
+        <div class="page-header">
+          <h1>Exploit Pipeline</h1>
+          <p>Nmap taramasi, exploit arama ve LLM uyarlama is akisi</p>
+        </div>
+
+        <div class="grid-2">
+          <!-- Sol: Parametreler -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="settings-2"></i> Parametreler</div>
+            </div>
+
+            <div class="upload-zone" id="nmap-upload-zone">
+              <i data-lucide="upload-cloud" class="upload-icon"></i>
+              <div class="upload-text">Nmap XML dosyasini surukle veya tikla</div>
+              <div class="upload-sub">.xml dosyasi bekleniyor</div>
+              <div class="upload-filename hidden" id="nmap-filename"></div>
+              <input type="file" accept=".xml" id="nmap-file-input" style="display:none;">
+            </div>
+
+            <div class="form-row mt-16">
+              <div class="form-group">
+                <label class="form-label">LHOST (Saldirgan IP)</label>
+                <input type="text" class="form-input" id="pipeline-lhost" placeholder="10.10.14.5">
+                <div class="form-help">Sizin makinenizin, hedeften gelecek olan baglantiyi (Reverse Shell) karsilayacagi IP adresidir. Genellikle VPN veya yerel ag IP adresinizdir.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">RHOST (Hedef IP)</label>
+                <input type="text" class="form-input" id="pipeline-rhost" placeholder="10.10.10.3">
+                <div class="form-help">Zaafiyet barindiran ve istismar (exploit) edilecek olan karsi sistemin IP adresidir. Nmap taramasindaki hedef cihazdir.</div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">LPORT (Dinleme Portu)</label>
+                <input type="text" class="form-input" id="pipeline-lport" placeholder="4444" value="4444">
+                <div class="form-help">Makinenizde (LHOST) baglantiyi bekleyeceginiz acik port numarasidir. (Orn: 4444, 8080)</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">LLM Modeli</label>
+                <input type="text" class="form-input" id="pipeline-model" list="model-list" placeholder="Model adını yazın (örn: gpt-4o, qwen2.5-coder)">
+                <datalist id="model-list"></datalist>
+                <div class="form-help">Yerel modeller için listeden seçin veya OpenAI/Gemini için model adını manuel girin.</div>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="pipeline-ghost" style="width:16px; height:16px; accent-color:var(--accent);">
+                <label for="pipeline-ghost" style="font-size:13px; font-weight:600; cursor:pointer;">Ghost Mode (OPSEC)</label>
+              </div>
+              <div class="form-help" style="margin-top:-10px; margin-bottom:14px; grid-column:1/-1;">Hedef sistemde iz bırakmamak için koda kendini silme ve log temizleme komutları (Ghost Mode) ekler.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Top-K (Arama Derinligi)</label>
+              <input type="number" class="form-input" id="pipeline-topk" value="2" min="1" max="10" style="max-width:120px;">
+              <div class="form-help">Veritabanindan getirilecek en uygun exploit sayisini belirler. Sayi arttikca analiz suresi uzayabilir.</div>
+            </div>
+
+            <div class="btn-group mt-16">
+              <button class="btn btn-primary" id="btn-run-pipeline" onclick="runPipeline()">
+                <i data-lucide="play"></i> Pipeline Baslat
+              </button>
+              <button class="btn btn-danger hidden" id="btn-cancel-pipeline" onclick="cancelPipeline()">
+                <i data-lucide="x"></i> Iptal
+              </button>
+            </div>
+          </div>
+
+          <!-- Sag: Ilerleme -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="activity"></i> Ilerleme</div>
+            </div>
+
+            <div class="pipeline-steps" id="pipeline-steps">
+              <div class="pipeline-step" data-step="1">
+                <div class="step-circle">1</div>
+                <div class="step-label">Nmap Parse</div>
+              </div>
+              <div class="pipeline-step" data-step="2">
+                <div class="step-circle">2</div>
+                <div class="step-label">Exploit Search</div>
+              </div>
+              <div class="pipeline-step" data-step="3">
+                <div class="step-circle">3</div>
+                <div class="step-label">LLM Adapt</div>
+              </div>
+              <div class="pipeline-step" data-step="4">
+                <div class="step-circle">4</div>
+                <div class="step-label">Save</div>
+              </div>
+            </div>
+
+            <div id="pipeline-info" class="mt-16" style="min-height:120px;">
+              <div class="empty-state" style="padding:20px;">
+                <i data-lucide="rocket"></i>
+                <p>Pipeline baslatilmayi bekliyor</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline Sonuc -->
+        <div class="card hidden mt-24" id="pipeline-result-card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="code-2"></i> Uyarlanmis Exploit</div>
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" onclick="copyCode()"><i data-lucide="copy"></i> Kopyala</button>
+              <button class="btn btn-primary btn-sm" onclick="downloadCode()"><i data-lucide="download"></i> Indir</button>
+            </div>
+          </div>
+          <div id="pipeline-result-meta" class="mb-16"></div>
+          <div class="code-viewer">
+            <div class="code-header">
+              <span id="result-filename">adapted_exploit.txt</span>
+              <span id="result-size"></span>
+            </div>
+            <div class="code-body"><pre id="result-code"></pre></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-search" class="page">
+        <div class="page-header">
+          <h1>Exploit Arama</h1>
+          <p>ChromaDB uzerinden semantik exploit aramasi</p>
+        </div>
+
+        <div class="card mb-24">
+          <div class="form-row">
+            <div class="form-group" style="flex:3;">
+              <label class="form-label">Arama Sorgusu</label>
+              <input type="text" class="form-input" id="search-query" placeholder="vsftpd 2.3.4, OpenSSH 7.2, Apache 2.4.49...">
+            </div>
+            <div class="form-group" style="flex:1; max-width:120px;">
+              <label class="form-label">Top-K</label>
+              <input type="number" class="form-input" id="search-topk" value="3" min="1" max="20">
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-search" onclick="searchExploit()">
+            <i data-lucide="search"></i> Ara
+          </button>
+        </div>
+
+        <div id="search-results">
+          <div class="empty-state">
+            <i data-lucide="search"></i>
+            <p>Arama sonuclari burada gorunecek</p>
+          </div>
+        </div>
+
+        <!-- Adapt Modal -->
+        <div class="card hidden mt-24" id="adapt-card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="wand-2"></i> Exploit Uyarlama</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">LHOST (Sizin IP)</label><input type="text" class="form-input" id="adapt-lhost" placeholder="10.10.14.5">
+            <div class="form-help">Dinlemeye gececek olan saldirgan IP.</div></div>
+            <div class="form-group"><label class="form-label">RHOST (Hedef IP)</label><input type="text" class="form-input" id="adapt-rhost" placeholder="10.10.10.3">
+            <div class="form-help">Saldirilacak cihazin IP adresi.</div></div>
+            <div class="form-group"><label class="form-label">LPORT</label><input type="text" class="form-input" id="adapt-lport" value="4444">
+            <div class="form-help">Baglantiyi karsilayacak port.</div></div>
+          </div>
+          <button class="btn btn-primary" id="btn-adapt" onclick="adaptSelectedExploit()">
+            <i data-lucide="wand-2"></i> LLM ile Uyarla
+          </button>
+          <div id="adapt-result" class="mt-16 hidden">
+            <div class="code-viewer">
+              <div class="code-header"><span>Uyarlanmis Kod</span>
+                <button class="btn btn-secondary btn-sm" onclick="copyAdaptedCode()"><i data-lucide="copy"></i></button>
+              </div>
+              <div class="code-body"><pre id="adapt-code"></pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-database" class="page">
+        <div class="page-header">
+          <h1>Veritabani Yonetimi</h1>
+          <p>ChromaDB vekttor veritabanini yonet</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="hard-drive"></i> ChromaDB Durumu</div>
+              <button class="btn btn-secondary btn-sm" onclick="refreshDbStats()"><i data-lucide="refresh-cw"></i></button>
+            </div>
+            <div id="db-stats">
+              <div class="empty-state" style="padding:16px;"><p>Yukleniyor...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="upload"></i> Veritabanini Guncelle</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">CSV Dosya Yolu</label>
+              <input type="text" class="form-input" id="db-csv-path" placeholder="exploitdb/files_exploits.csv">
+              <div class="form-help">Exploit-DB files_exploits.csv dosyasinin yolu</div>
+            </div>
+            <button class="btn btn-primary" id="btn-update-db" onclick="updateDb()">
+              <i data-lucide="database"></i> Ingest Baslat
+            </button>
+            <div id="db-progress" class="mt-16 hidden">
+              <div class="progress-bar"><div class="progress-fill" id="db-progress-fill" style="width:0%"></div></div>
+              <div style="display:flex; justify-content:space-between; margin-top:8px;">
+                <span style="font-size:12px; color:var(--text-muted);" id="db-progress-text">Baslatiliyor...</span>
+                <span style="font-size:12px; color:var(--accent); font-weight:600; font-family:var(--font-mono);" id="db-progress-pct">0%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-settings" class="page">
+        <div class="page-header">
+          <h1>Ayarlar</h1>
+          <p>OffSploit yapilandirma ayarlari</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="server"></i> LLM Provider Ayarlari</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Provider</label>
+              <select class="form-select" id="set-llm-provider">
+                <option value="ollama">Ollama (Yerel)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">API Key (Gemini/OpenAI icin)</label>
+              <input type="password" class="form-input" id="set-api-key" placeholder="API Anahtarinizi girin">
+            </div>
+          </div>
+          <div class="form-row mt-16">
+            <div class="form-group">
+              <label class="form-label">Ollama API URL</label>
+              <input type="text" class="form-input" id="set-ollama-url" placeholder="http://localhost:11434">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Varsayilan Model</label>
+              <input type="text" class="form-input" id="set-ollama-model" placeholder="qwen2.5-coder:14b">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Timeout (saniye)</label>
+              <input type="number" class="form-input" id="set-ollama-timeout" placeholder="300">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="card-header" style="margin-top:0;">
+            <div class="card-title"><i data-lucide="database"></i> ChromaDB Ayarlari</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">DB Yolu</label>
+              <input type="text" class="form-input" id="set-chromadb-path" placeholder="./offsploit_chromadb">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Koleksiyon Adi</label>
+              <input type="text" class="form-input" id="set-collection-name" placeholder="offsploit_db">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="card-header" style="margin-top:0;">
+            <div class="card-title"><i data-lucide="folder"></i> Dizin Ayarlari</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Exploit-DB Kok Dizini</label>
+              <input type="text" class="form-input" id="set-exploitdb-root" placeholder="exploitdb">
+            </div>
+            <div class="form-group">
+              <label class="form-label">CSV Dosya Yolu</label>
+              <input type="text" class="form-input" id="set-csv-path" placeholder="exploitdb/files_exploits.csv">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cikti Dizini</label>
+              <input type="text" class="form-input" id="set-output-dir" placeholder="./output">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Varsayilan Top-K</label>
+              <input type="number" class="form-input" id="set-top-k" placeholder="2" min="1" max="20">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="saveSettings()"><i data-lucide="save"></i> Kaydet</button>
+            <button class="btn btn-secondary" onclick="loadSettings()"><i data-lucide="rotate-ccw"></i> Sifirla</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-terminal" class="page">
+        <div class="page-header">
+          <h1>Web Terminal</h1>
+          <p>Sistem uzerinde dogrudan komut calistirin (Reverse Shell dinlemek icin Netcat vs. kullanilabilir)</p>
+        </div>
+        <div class="card" style="padding:0; overflow:hidden; background:#000;">
+          <div id="terminal-container" style="height: 60vh; width: 100%; padding: 10px;"></div>
+        </div>
+      </div>
+
+      <div id="page-logs" class="page">
+        <div class="page-header">
+          <h1>Log Viewer</h1>
+          <p>Gercek zamanli sistem loglari</p>
+        </div>
+
+        <div class="log-viewer">
+          <div class="log-toolbar">
+            <button class="btn btn-secondary btn-sm" onclick="clearLogs()"><i data-lucide="trash-2"></i> Temizle</button>
+            <button class="btn btn-secondary btn-sm" id="btn-pause-logs" onclick="togglePauseLogs()"><i data-lucide="pause"></i> Duraklat</button>
+            <div style="flex:1;"></div>
+            <select class="form-select" id="log-filter" style="width:auto; padding:5px 10px; font-size:12px;" onchange="filterLogs()">
+              <option value="ALL">Tum Seviyeler</option>
+              <option value="DEBUG">DEBUG</option>
+              <option value="INFO">INFO</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </div>
+          <div class="log-content" id="log-content">
+            <div class="empty-state" style="padding:40px;"><i data-lucide="terminal"></i><p>Loglar burada gorunecek</p></div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    // STATE
+    const state = {
+      currentPage: 'dashboard',
+      socket: null,
+      connected: false,
+      logs: [],
+      logsPaused: false,
+      logFilter: 'ALL',
+      pipelineRunning: false,
+      pipelineTaskId: null,
+      nmapFile: null,
+      nmapPath: null,
+      selectedExploitCode: null,
+      adaptedCode: null,
+      settings: {},
+    };
+
+    // SOCKET.IO
+    function initSocket() {
+      state.socket = io();
+      state.socket.on('connect', () => { addLog({ level:'INFO', message:'Socket.IO baglandi', timestamp: new Date().toLocaleTimeString() }); });
+      state.socket.on('disconnect', () => { addLog({ level:'ERROR', message:'Socket.IO baglantisi koptu', timestamp: new Date().toLocaleTimeString() }); });
+      
+      state.socket.on('system_metrics', (data) => {
+        const cpuBar = document.getElementById('sys-cpu-bar');
+        const cpuVal = document.getElementById('sys-cpu-val');
+        const memBar = document.getElementById('sys-mem-bar');
+        const memVal = document.getElementById('sys-mem-val');
+        if(cpuBar && cpuVal) {
+          cpuBar.style.width = data.cpu + '%';
+          cpuVal.textContent = data.cpu.toFixed(1) + '%';
+          if(data.cpu > 80) cpuBar.style.background = 'var(--error)';
+          else cpuBar.style.background = 'var(--accent)';
+        }
+        if(memBar && memVal) {
+          memBar.style.width = data.memory + '%';
+          memVal.textContent = data.memory.toFixed(1) + '%';
+          if(data.memory > 80) memBar.style.background = 'var(--error)';
+          else memBar.style.background = 'var(--warning)';
+        }
+      });
+
+      // Terminal Socket handlers
+      state.socket.on('pty_output', function(data) {
+        if (state.term) {
+          state.term.write(data.output);
+        }
+      });
+
+      state.socket.on('log', (data) => {
+        addLog(data);
+      });
+
+      state.socket.on('error', (data) => {
+        showToast(data.message, 'error');
+      });
+
+      state.socket.on('upload_complete', (data) => {
+        if (data.success) {
+          state.nmapPath = data.path;
+          showToast('Nmap dosyasi yuklendi: ' + data.filename, 'success');
+        }
+      });
+
+      state.socket.on('task_started', (data) => {
+        state.pipelineTaskId = data.task_id;
+      });
+
+      state.socket.on('pipeline_step', (data) => {
+        updatePipelineStep(data);
+      });
+
+      state.socket.on('pipeline_complete', (data) => {
+        state.pipelineRunning = false;
+        document.getElementById('btn-run-pipeline').disabled = false;
+        document.getElementById('btn-cancel-pipeline').classList.add('hidden');
+
+        if (data.success) {
+          showToast('Pipeline basariyla tamamlandi!', 'success');
+          showPipelineResult(data);
+        } else {
+          showToast('Pipeline: ' + (data.message || 'Hata'), 'warning');
+        }
+        checkStatus();
+      });
+
+      state.socket.on('search_status', (data) => {
+        if (data.status === 'running') {
+          document.getElementById('btn-search').disabled = true;
+          document.getElementById('btn-search').innerHTML = '<span class="spinner"></span> Araniyor...';
+        }
+      });
+
+      state.socket.on('search_results', (data) => {
+        document.getElementById('btn-search').disabled = false;
+        document.getElementById('btn-search').innerHTML = '<i data-lucide="search"></i> Ara';
+        lucide.createIcons();
+        renderSearchResults(data);
+      });
+
+      state.socket.on('adapt_status', (data) => {
+        if (data.status === 'running') {
+          document.getElementById('btn-adapt').disabled = true;
+          document.getElementById('btn-adapt').innerHTML = '<span class="spinner"></span> LLM calisiyor...';
+        }
+      });
+
+      state.socket.on('adapt_result', (data) => {
+        document.getElementById('btn-adapt').disabled = false;
+        document.getElementById('btn-adapt').innerHTML = '<i data-lucide="wand-2"></i> LLM ile Uyarla';
+        lucide.createIcons();
+        if (data.success) {
+          state.adaptedCode = data.code;
+          document.getElementById('adapt-code').textContent = data.code;
+          document.getElementById('adapt-result').classList.remove('hidden');
+          showToast('Exploit basariyla uyarlandi', 'success');
+        } else {
+          showToast('Uyarlama hatasi: ' + data.message, 'error');
+        }
+      });
+
+      state.socket.on('db_update_status', (data) => {
+        const btn = document.getElementById('btn-update-db');
+        const prog = document.getElementById('db-progress');
+        if (data.status === 'running') {
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner"></span> Calistiriliyor...';
+          prog.classList.remove('hidden');
+        } else if (data.status === 'done') {
+          btn.disabled = false;
+          btn.innerHTML = '<i data-lucide="database"></i> Ingest Baslat';
+          lucide.createIcons();
+          showToast(data.message, 'success');
+          prog.classList.add('hidden');
+          refreshDbStats();
+          checkStatus();
+        } else if (data.status === 'error') {
+          btn.disabled = false;
+          btn.innerHTML = '<i data-lucide="database"></i> Ingest Baslat';
+          lucide.createIcons();
+          showToast('DB hatasi: ' + data.message, 'error');
+          prog.classList.add('hidden');
+        }
+      });
+
+      state.socket.on('db_update_progress', (data) => {
+        document.getElementById('db-progress-fill').style.width = data.percentage + '%';
+        document.getElementById('db-progress-pct').textContent = data.percentage + '%';
+        document.getElementById('db-progress-text').textContent = data.current + ' / ' + data.total + ' kayit';
+      });
+    }
+
+    // NAVIGATION
+    function navigateTo(pageId) {
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+
+      const navEl = document.getElementById('nav-' + pageId);
+      if (navEl) navEl.classList.add('active');
+
+      const pageEl = document.getElementById('page-' + pageId);
+      if (pageEl) pageEl.classList.add('active');
+
+      state.currentPage = pageId;
+
+      if (pageId === 'terminal') {
+        setTimeout(() => {
+          initTerminal();
+          if(state.fitAddon) state.fitAddon.fit();
+        }, 100);
+      }
+    }
+
+    document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+      item.addEventListener('click', () => navigateTo(item.dataset.page));
+    });
+
+    // STATUS CHECKER
+    async function checkStatus() {
+      try {
+        const resp = await fetch('/api/status');
+        const data = await resp.json();
+
+        // Ollama
+        const dotOllama = document.getElementById('dot-ollama');
+        const statOllama = document.getElementById('stat-ollama');
+        if (data.ollama.connected) {
+          dotOllama.className = 'status-dot online';
+          statOllama.textContent = 'Online';
+          statOllama.style.color = 'var(--success)';
+          updateModelDropdown(data.ollama.models);
+        } else {
+          dotOllama.className = 'status-dot offline';
+          statOllama.textContent = 'Offline';
+          statOllama.style.color = 'var(--error)';
+        }
+
+        // ChromaDB
+        const dotDb = document.getElementById('dot-chromadb');
+        const statDb = document.getElementById('stat-db-count');
+        if (data.chromadb.connected) {
+          dotDb.className = 'status-dot online';
+          statDb.textContent = data.chromadb.count.toLocaleString();
+        } else {
+          dotDb.className = 'status-dot offline';
+          statDb.textContent = 'N/A';
+        }
+
+        // Exploit-DB
+        const dotEdb = document.getElementById('dot-exploitdb');
+        const statEdb = document.getElementById('stat-exploitdb');
+        if (data.exploitdb.exists) {
+          dotEdb.className = 'status-dot online';
+          statEdb.textContent = 'Mevcut';
+          statEdb.style.color = 'var(--success)';
+        } else {
+          dotEdb.className = 'status-dot offline';
+          statEdb.textContent = 'Yok';
+          statEdb.style.color = 'var(--error)';
+        }
+      } catch(e) {
+        console.error('Status check failed:', e);
+      }
+    }
+
+    async function refreshModels() {
+      try {
+        const resp = await fetch('/api/ollama/models');
+        const data = await resp.json();
+        const container = document.getElementById('models-list');
+        if (data.models.length === 0) {
+          container.innerHTML = '<div class="empty-state" style="padding:16px;"><p>Model bulunamadi. Ollama calistirin.</p></div>';
+          return;
+        }
+        let html = '<table class="data-table"><thead><tr><th>Model</th><th>Durum</th></tr></thead><tbody>';
+        data.models.forEach(m => {
+          html += '<tr><td style="font-family:var(--font-mono); font-size:13px;">' + escHtml(m) + '</td>';
+          html += '<td><span class="badge success">Hazir</span></td></tr>';
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        
+        const modelList = document.getElementById('model-list');
+        let optionsHtml = '';
+        data.models.forEach(m => {
+          optionsHtml += '<option value="' + m + '">';
+        });
+        modelList.innerHTML = optionsHtml;
+      } catch(e) {
+        showToast('Model listesi alinamadi', 'error');
+      }
+    }
+
+    // FILE UPLOAD (Drag & Drop)
+    function initUpload() {
+      const zone = document.getElementById('nmap-upload-zone');
+      const input = document.getElementById('nmap-file-input');
+
+      zone.addEventListener('click', () => input.click());
+      zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) handleNmapFile(e.dataTransfer.files[0]);
+      });
+      input.addEventListener('change', () => {
+        if (input.files.length > 0) handleNmapFile(input.files[0]);
+      });
+    }
+
+    function handleNmapFile(file) {
+      const zone = document.getElementById('nmap-upload-zone');
+      const fname = document.getElementById('nmap-filename');
+      state.nmapFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        state.socket.emit('upload_nmap', { content: e.target.result, filename: file.name });
+        zone.classList.add('has-file');
+        fname.textContent = file.name;
+        fname.classList.remove('hidden');
+      };
+      reader.readAsText(file);
+    }
+
+    // PIPELINE
+    function runPipeline() {
+      if (!state.nmapPath) {
+        showToast('Lutfen onceNmap XML dosyasi yukleyin', 'warning');
+        return;
+      }
+
+      state.pipelineRunning = true;
+      document.getElementById('btn-run-pipeline').disabled = true;
+      document.getElementById('btn-cancel-pipeline').classList.remove('hidden');
+      document.getElementById('pipeline-result-card').classList.add('hidden');
+
+      // Reset steps
+      document.querySelectorAll('.pipeline-step').forEach(s => {
+        s.className = 'pipeline-step';
+        s.querySelector('.step-circle').innerHTML = s.dataset.step;
+      });
+      document.getElementById('pipeline-info').innerHTML = '<div class="text-center" style="padding:24px;"><span class="spinner lg"></span><p class="mt-16" style="color:var(--text-muted);">Pipeline calisiyor...</p></div>';
+
+      state.socket.emit('run_pipeline', {
+        nmap_path: state.nmapPath,
+        lhost: document.getElementById('pipeline-lhost').value,
+        rhost: document.getElementById('pipeline-rhost').value,
+        lport: document.getElementById('pipeline-lport').value || '4444',
+        model: document.getElementById('pipeline-model').value,
+        top_k: parseInt(document.getElementById('pipeline-topk').value) || 2,
+        ghost: document.getElementById('pipeline-ghost').checked
+      });
+    }
+
+    function cancelPipeline() {
+      if (state.pipelineTaskId) {
+        state.socket.emit('cancel_operation', { task_id: state.pipelineTaskId });
+      }
+    }
+
+    function updatePipelineStep(data) {
+      const stepEl = document.querySelector('.pipeline-step[data-step="' + data.step + '"]');
+      if (!stepEl) return;
+
+      stepEl.className = 'pipeline-step ' + data.status;
+      if (data.status === 'done') {
+        stepEl.querySelector('.step-circle').innerHTML = '<i data-lucide="check" style="width:16px;height:16px;"></i>';
+        lucide.createIcons();
+      }
+
+      // Info panel
+      const infoEl = document.getElementById('pipeline-info');
+      let infoHtml = '';
+
+      if (data.status === 'done' && data.data) {
+        if (data.step === 1 && Array.isArray(data.data)) {
+          infoHtml = '<div style="font-size:13px; margin-bottom:8px; color:var(--success); font-weight:600;">' + data.data.length + ' acik servis bulundu</div>';
+          infoHtml += '<table class="data-table"><thead><tr><th>Port</th><th>Servis</th></tr></thead><tbody>';
+          data.data.forEach(s => {
+            infoHtml += '<tr><td style="font-family:var(--font-mono);">' + s.port + '/' + s.protocol + '</td><td>' + escHtml(s.query) + '</td></tr>';
+          });
+          infoHtml += '</tbody></table>';
+        } else if (data.step === 2) {
+          const score = Math.max(10, Math.round(100 - (data.data.distance * 100)));
+          const scoreColor = score > 80 ? 'var(--success)' : (score > 50 ? 'var(--warning)' : 'var(--error)');
+          
+          infoHtml = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">';
+          infoHtml += '<div style="font-size:13px; color:var(--success); font-weight:600;">Exploit Eslesti</div>';
+          infoHtml += '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Basari Ihtimali</span><div style="background:'+scoreColor+'20; color:'+scoreColor+'; padding:2px 8px; border-radius:12px; font-weight:700; font-size:12px;">%'+score+'</div></div>';
+          infoHtml += '</div>';
+          
+          infoHtml += '<div style="font-size:12px; color:var(--text-secondary); line-height:1.8;">';
+          infoHtml += '<strong>CVE / Ozet:</strong> ' + escHtml(data.data.description || '') + '<br>';
+          infoHtml += '<strong>Dosya:</strong> <span class="text-mono">' + escHtml(data.data.file_path || '') + '</span><br>';
+          infoHtml += '<strong>Platform:</strong> ' + escHtml(data.data.platform || '') + '</div>';
+        } else if (data.step === 4 && data.data.path) {
+          infoHtml = '<div style="font-size:13px; color:var(--success); font-weight:600;">Kaydedildi: <span class="text-mono">' + escHtml(data.data.path) + '</span></div>';
+        }
+      } else if (data.status === 'running') {
+        infoHtml = '<div class="text-center" style="padding:20px;"><span class="spinner lg"></span><p class="mt-16" style="color:var(--accent);">' + escHtml(data.name) + ' calisiyor...</p></div>';
+      } else if (data.status === 'warning') {
+        infoHtml = '<div style="padding:16px; color:var(--warning);"><i data-lucide="alert-triangle" style="width:16px;height:16px;display:inline;"></i> ' + escHtml(data.message || '') + '</div>';
+      }
+
+      if (infoHtml) infoEl.innerHTML = infoHtml;
+      lucide.createIcons();
+    }
+
+    function showPipelineResult(data) {
+      state.adaptedCode = data.adapted_code;
+      const card = document.getElementById('pipeline-result-card');
+      card.classList.remove('hidden');
+
+      const meta = data.exploit || {};
+      document.getElementById('pipeline-result-meta').innerHTML =
+        '<div class="result-meta">' +
+        '<span><i data-lucide="file-code"></i> ' + escHtml(meta.file_path || '') + '</span>' +
+        '<span><i data-lucide="monitor"></i> ' + escHtml(meta.platform || '') + '</span>' +
+        '<span><i data-lucide="target"></i> ' + escHtml(meta.query || '') + '</span>' +
+        '</div>';
+
+      document.getElementById('result-code').textContent = data.adapted_code;
+      document.getElementById('result-filename').textContent = data.output_path ? data.output_path.split(/[/\\]/).pop() : 'adapted_exploit.txt';
+      document.getElementById('result-size').textContent = (data.adapted_code.length / 1024).toFixed(1) + ' KB';
+      lucide.createIcons();
+
+      // Scroll to result
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function copyCode() {
+      if (state.adaptedCode) {
+        navigator.clipboard.writeText(state.adaptedCode);
+        showToast('Kod panoya kopyalandi', 'success');
+      }
+    }
+
+    function downloadCode() {
+      if (state.adaptedCode) {
+        const fname = document.getElementById('result-filename').textContent || 'adapted_exploit.txt';
+        const blob = new Blob([state.adaptedCode], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        a.click();
+      }
+    }
+
+    // SEARCH
+    function searchExploit() {
+      const query = document.getElementById('search-query').value.trim();
+      const topk = parseInt(document.getElementById('search-topk').value) || 3;
+      if (!query) { showToast('Arama sorgusu girin', 'warning'); return; }
+      state.socket.emit('search_exploit', { query, top_k: topk });
+    }
+
+    // Enter key support
+    document.getElementById('search-query').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') searchExploit();
+    });
+
+    function renderSearchResults(data) {
+      const container = document.getElementById('search-results');
+      if (data.error) {
+        container.innerHTML = '<div class="empty-state"><p style="color:var(--error);">Hata: ' + escHtml(data.error) + '</p></div>';
+        return;
+      }
+      if (!data.results || data.results.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i data-lucide="search-x"></i><p>Sonuc bulunamadi</p></div>';
+        lucide.createIcons();
+        return;
+      }
+
+      let html = '';
+      data.results.forEach((r, idx) => {
+        const score = r.distance !== undefined ? (1 - r.distance).toFixed(2) : '?';
+        html += '<div class="result-card">';
+        html += '<div class="result-header"><div class="result-title">' + escHtml(r.description) + '</div>';
+        html += '<div class="result-score">' + score + '</div></div>';
+        html += '<div class="result-meta">';
+        html += '<span><i data-lucide="file-code"></i> ' + escHtml(r.file_path) + '</span>';
+        html += '<span><i data-lucide="monitor"></i> ' + escHtml(r.platform) + '</span>';
+        html += '<span><i data-lucide="tag"></i> ' + escHtml(r.type) + '</span>';
+        html += '</div>';
+        if (r.has_source) {
+          html += '<div class="code-viewer" style="max-height:200px;"><div class="code-body" style="max-height:180px;"><pre>' + escHtml(r.source_code.substring(0, 2000)) + '</pre></div></div>';
+          html += '<div class="result-actions">';
+          html += '<button class="btn btn-primary btn-sm" onclick="selectExploitForAdapt(' + idx + ')"><i data-lucide="wand-2"></i> Uyarla</button>';
+          html += '<button class="btn btn-secondary btn-sm" onclick="copyExploitCode(' + idx + ')"><i data-lucide="copy"></i> Kopyala</button>';
+          html += '</div>';
+        } else {
+          html += '<div style="color:var(--text-muted); font-size:12px; margin-top:8px;">Kaynak kodu bulunamadi</div>';
+        }
+        html += '</div>';
+      });
+      container.innerHTML = html;
+      // Store results for later use
+      state.searchResults = data.results;
+      lucide.createIcons();
+    }
+
+    function selectExploitForAdapt(idx) {
+      const r = state.searchResults[idx];
+      if (r && r.source_code) {
+        state.selectedExploitCode = r.source_code;
+        document.getElementById('adapt-card').classList.remove('hidden');
+        document.getElementById('adapt-result').classList.add('hidden');
+        document.getElementById('adapt-card').scrollIntoView({ behavior: 'smooth' });
+        showToast('Exploit secildi. Parametreleri girin ve uyarlayin.', 'info');
+      }
+    }
+
+    function copyExploitCode(idx) {
+      const r = state.searchResults[idx];
+      if (r && r.source_code) {
+        navigator.clipboard.writeText(r.source_code);
+        showToast('Exploit kodu kopyalandi', 'success');
+      }
+    }
+
+    function adaptSelectedExploit() {
+      if (!state.selectedExploitCode) { showToast('Once bir exploit secin', 'warning'); return; }
+      state.socket.emit('adapt_exploit', {
+        source_code: state.selectedExploitCode,
+        lhost: document.getElementById('adapt-lhost').value,
+        rhost: document.getElementById('adapt-rhost').value,
+        lport: document.getElementById('adapt-lport').value || '4444',
+        model: document.getElementById('pipeline-model').value,
+      });
+    }
+
+    function copyAdaptedCode() {
+      if (state.adaptedCode) {
+        navigator.clipboard.writeText(state.adaptedCode);
+        showToast('Uyarlanmis kod kopyalandi', 'success');
+      }
+    }
+
+    // DATABASE
+    async function refreshDbStats() {
+      try {
+        const resp = await fetch('/api/db/stats');
+        const data = await resp.json();
+        const container = document.getElementById('db-stats');
+        if (data.error) {
+          container.innerHTML = '<div style="color:var(--warning); font-size:13px;">Koleksiyon bulunamadi. Ingest yapin.</div>';
+          return;
+        }
+        container.innerHTML =
+          '<table class="data-table"><tbody>' +
+          '<tr><td>Koleksiyon</td><td class="text-mono">' + escHtml(data.collection) + '</td></tr>' +
+          '<tr><td>Kayit Sayisi</td><td style="font-weight:700; color:var(--accent);">' + (data.count || 0).toLocaleString() + '</td></tr>' +
+          '<tr><td>Depolama Yolu</td><td class="text-mono">' + escHtml(data.path) + '</td></tr>' +
+          '</tbody></table>';
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    function updateDb() {
+      const csvPath = document.getElementById('db-csv-path').value.trim();
+      state.socket.emit('update_db', { csv_path: csvPath });
+    }
+
+    // SETTINGS
+    async function loadSettings() {
+      try {
+        const resp = await fetch('/api/settings');
+        const data = await resp.json();
+        state.settings = data;
+        document.getElementById('set-llm-provider').value = data.llm_provider || 'ollama';
+        document.getElementById('set-api-key').value = data.api_key || '';
+        document.getElementById('set-ollama-url').value = data.ollama_url || '';
+        document.getElementById('set-ollama-model').value = data.ollama_model || '';
+        document.getElementById('set-ollama-timeout').value = data.ollama_timeout || 300;
+        document.getElementById('set-chromadb-path').value = data.chromadb_path || '';
+        document.getElementById('set-collection-name').value = data.collection_name || '';
+        document.getElementById('set-exploitdb-root').value = data.exploitdb_root || '';
+        document.getElementById('set-csv-path').value = data.csv_path || '';
+        document.getElementById('set-output-dir').value = data.output_dir || '';
+        document.getElementById('set-top-k').value = data.top_k || 2;
+        document.getElementById('db-csv-path').value = data.csv_path || '';
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    async function saveSettings() {
+      const data = {
+        llm_provider: document.getElementById('set-llm-provider').value,
+        api_key: document.getElementById('set-api-key').value,
+        ollama_url: document.getElementById('set-ollama-url').value,
+        ollama_model: document.getElementById('set-ollama-model').value,
+        ollama_timeout: parseInt(document.getElementById('set-ollama-timeout').value) || 300,
+        chromadb_path: document.getElementById('set-chromadb-path').value,
+        collection_name: document.getElementById('set-collection-name').value,
+        exploitdb_root: document.getElementById('set-exploitdb-root').value,
+        csv_path: document.getElementById('set-csv-path').value,
+        output_dir: document.getElementById('set-output-dir').value,
+        top_k: parseInt(document.getElementById('set-top-k').value) || 2,
+      };
+      try {
+        const resp = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const result = await resp.json();
+        if (result.success) {
+          showToast('Ayarlar kaydedildi', 'success');
+          checkStatus();
+        }
+      } catch(e) {
+        showToast('Ayarlar kaydedilemedi', 'error');
+      }
+    }
+
+    // LOGS
+    function addLog(entry) {
+      state.logs.push(entry);
+      if (state.logs.length > 500) state.logs.shift();
+      if (!state.logsPaused) renderLogs();
+    }
+
+    function renderLogs() {
+      const container = document.getElementById('log-content');
+      const filtered = state.logFilter === 'ALL'
+        ? state.logs
+        : state.logs.filter(l => l.level === state.logFilter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:40px;"><i data-lucide="terminal"></i><p>Log yok</p></div>';
+        lucide.createIcons();
+        return;
+      }
+
+      let html = '';
+      filtered.forEach(l => {
+        html += '<div class="log-entry">';
+        html += '<span class="log-time">' + escHtml(l.timestamp) + '</span>';
+        html += '<span class="log-level ' + l.level + '">' + l.level + '</span>';
+        html += '<span class="log-msg">' + escHtml(l.message) + '</span>';
+        html += '</div>';
+      });
+      container.innerHTML = html;
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function clearLogs() {
+      state.logs = [];
+      document.getElementById('log-content').innerHTML = '<div class="empty-state" style="padding:40px;"><i data-lucide="terminal"></i><p>Loglar temizlendi</p></div>';
+      lucide.createIcons();
+    }
+
+    function togglePauseLogs() {
+      state.logsPaused = !state.logsPaused;
+      const btn = document.getElementById('btn-pause-logs');
+      if (state.logsPaused) {
+        btn.innerHTML = '<i data-lucide="play"></i> Devam';
+      } else {
+        btn.innerHTML = '<i data-lucide="pause"></i> Duraklat';
+        renderLogs();
+      }
+      lucide.createIcons();
+    }
+
+    function filterLogs() {
+      state.logFilter = document.getElementById('log-filter').value;
+      renderLogs();
+    }
+
+    // HISTORY
+    async function loadHistory() {
+      try {
+        const resp = await fetch('/api/history');
+        const data = await resp.json();
+        const container = document.getElementById('recent-history');
+        if (!data || data.length === 0) {
+          container.innerHTML = '<div class="empty-state" style="padding:16px;"><p>Henuz islem yapilmadi</p></div>';
+          return;
+        }
+        let html = '<table class="data-table"><thead><tr><th>Zaman</th><th>Tur</th><th>Detay</th><th>Durum</th></tr></thead><tbody>';
+        data.slice(-5).reverse().forEach(h => {
+          html += '<tr>';
+          html += '<td style="font-size:12px; font-family:var(--font-mono);">' + escHtml(h.timestamp || '') + '</td>';
+          html += '<td><span class="badge info">' + escHtml(h.type || '') + '</span></td>';
+          html += '<td style="max-width:200px; overflow:hidden; text-overflow:ellipsis;">' + escHtml(h.exploit || h.count + ' kayit' || '') + '</td>';
+          html += '<td>' + (h.success ? '<span class="badge success">Basarili</span>' : '<span class="badge error">Hata</span>') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch(e) { console.error(e); }
+    }
+
+    // TOAST SYSTEM
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      const icons = { success: 'check-circle', error: 'x-circle', warning: 'alert-triangle', info: 'info' };
+      toast.innerHTML = '<i data-lucide="' + (icons[type] || 'info') + '" style="width:16px;height:16px;flex-shrink:0;"></i> ' + escHtml(message);
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(80px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // UTILS
+    function escHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    // TOPOLOGY GRAPH
+    let networkGraph = null;
+    function drawTopology() {
+      const container = document.getElementById('topology-graph');
+      if (!container) return;
+
+      const nodes = new vis.DataSet([
+        { id: 1, label: 'LHOST\n(Attacker)', title: '10.10.14.5', color: '#10b981', font: { color: '#ffffff' }, shape: 'diamond' },
+        { id: 2, label: 'RHOST\n(Target)', title: '10.10.10.3', color: '#ef4444', font: { color: '#ffffff' }, shape: 'dot' },
+        { id: 3, label: 'Port 80\n(Apache)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
+        { id: 4, label: 'Port 445\n(SMB)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
+        { id: 5, label: 'AD Domain\n(HTB.local)', color: '#8b5cf6', font: { color: '#ffffff' }, shape: 'star' }
+      ]);
+
+      const edges = new vis.DataSet([
+        { from: 1, to: 2, label: 'Nmap Scan', color: '#6b7280', arrows: 'to', dashes: true },
+        { from: 2, to: 3 },
+        { from: 2, to: 4 },
+        { from: 3, to: 1, label: 'Reverse Shell', color: '#10b981', arrows: 'to', width: 2 },
+        { from: 4, to: 5, label: 'BloodHound', color: '#8b5cf6', arrows: 'to' }
+      ]);
+
+      const data = { nodes: nodes, edges: edges };
+      const options = {
+        nodes: { borderWidth: 2, shadow: true },
+        edges: { shadow: true, font: { color: '#a1a1aa', size: 10, align: 'middle' } },
+        physics: { stabilization: true, barnesHut: { springLength: 150 } },
+        interaction: { hover: true }
+      };
+
+      if (networkGraph) networkGraph.destroy();
+      networkGraph = new vis.Network(container, data, options);
+    }
+
+    // TERMINAL
+    function initTerminal() {
+      if (state.term) return; // already init
+
+      const termContainer = document.getElementById('terminal-container');
+      if (!termContainer) return;
+
+      const term = new Terminal({
+        cursorBlink: true,
+        theme: {
+          background: '#000000',
+          foreground: '#f8f8f2',
+          cursor: '#10b981'
+        },
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 14
+      });
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(termContainer);
+      fitAddon.fit();
+      
+      term.onData(data => {
+        state.socket.emit('pty_input', { input: data });
+      });
+
+      window.addEventListener('resize', () => {
+        if(state.currentPage === 'terminal') {
+          fitAddon.fit();
+          state.socket.emit('pty_resize', { cols: term.cols, rows: term.rows });
+        }
+      });
+
+      state.term = term;
+      state.fitAddon = fitAddon;
+      
+      // Request initial shell
+      state.socket.emit('pty_start', {});
+    }
+
+    // INIT
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initSocket();
+      initUpload();
+      loadSettings();
+      refreshDbStats();
+      loadHistory();
+      drawTopology();
+
+      // Sidebar Toggle
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', () => {
+          document.getElementById('sidebar').classList.toggle('collapsed');
+          const isCollapsed = document.getElementById('sidebar').classList.contains('collapsed');
+          const icon = sidebarToggle.querySelector('i');
+          icon.setAttribute('data-lucide', isCollapsed ? 'chevron-right' : 'chevron-left');
+          lucide.createIcons();
+        });
+      }
+
+      // Periodic status check
+      setInterval(() => {
+        checkStatus();
+        loadHistory();
+      }, 30000);
+    });
+  </script>
+</body>
+</html>

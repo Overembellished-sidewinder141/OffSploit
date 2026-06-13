@@ -1,0 +1,29 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "qwen2.5-coder:14b",
+  "ollama_timeout": 300,
+  "chromadb_path": "./offsploit_chromadb",
+  "collection_name": "offsploit_db",
+  "exploitdb_root": "exploitdb",
+  "csv_path": "exploitdb/files_exploits.csv",
+  "top_k": 2,
+  "output_dir": "./output",
+  "llm_provider": "ollama",
+  "api_key": "",
+
+  "embedding_provider": "ollama",
+  "embedding_model": "nomic-embed-text",
+
+  "use_docker_sandbox": true,
+  "docker_memory_limit": "256m",
+  "docker_cpu_limit": 0.5,
+  "docker_timeout": 30,
+
+  "use_swarm": true,
+  "swarm_max_rounds": 3,
+  "opsec_sensitivity": "moderate",
+
+  "evasion_level": "advanced",
+
+  "state_machine_persist": false
+}

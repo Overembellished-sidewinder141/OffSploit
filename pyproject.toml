@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "offsploit"
+version = "1.0.0"
+description = "OffSploit — Offline Exploit Adaptation Tool: RAG + Local LLM Powered Penetration Testing"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Egnake", email = "egnake@offsploit.dev"},
+]
+keywords = ["pentest", "exploit-db", "rag", "ollama", "nmap", "cybersecurity", "offsploit"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "chromadb>=0.4.22",
+    "pandas>=2.1.0",
+    "sentence-transformers>=2.2.2",
+    "requests>=2.31.0",
+    "rich>=13.0.0",
+    "fpdf2",
+    "networkx>=3.0.0",
+    "flask>=3.0.0",
+    "flask-socketio>=5.3.0",
+    "werkzeug>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+    "flake8>=7.0.0",
+]
+cloud = [
+    "google-generativeai",
+    "openai",
+]
+docker = [
+    "docker>=7.0.0",
+]
+
+[project.scripts]
+offsploit = "cli_app:main"
+offsploit-web = "web.web_app:main"
+
+[project.urls]
+Source = "https://github.com/egnake/OffSploit"
+
+[tool.setuptools.packages.find]
+include = ["offsploit", "offsploit.*", "web", "web.*"]
+
+[tool.setuptools]
+py-modules = ["cli_app"]
+
+[tool.setuptools.package-data]
+web = ["templates/**/*", "static/**/*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = ["E501"]
+
