@@ -190,7 +190,7 @@ OffSploit is developed strictly for **authorized penetration testing, Red Team o
   <img src="web/static/images/favicon.png" alt="OffSploit Logo" width="150"/>
 </div>
 
-# OffSploit: Otonom Exploit Uyarlama & C2 Çerçevesi
+# OffSploit: Otonom Exploit Uyarlama & C2 Framework'ü
 
 ![OffSploit Web Dashboard](ss/offsploit_web.png)
 
