@@ -169,7 +169,7 @@ docker run -it --rm --network host \
 ## Roadmap & Future Developments
 
 The development of OffSploit is ongoing. The following features are planned for upcoming releases:
-*   **Deep Active Directory Integration:** Incorporating advanced AD vectors beyond BloodHound mapping, such as automated Kerberos exploitation, Impacket integration, AS-REP Roasting, and Kerberoasting.
+*   **Enhanced Active Directory Analysis:** Improving BloodHound graph parsing to identify more complex attack paths, and allowing the RAG engine to ingest conceptual AD security literature to provide better theoretical guidance.
 *   **OffSploit LLM Fine-Tuning:** Training and releasing a purpose-built, domain-specific AI model (`offsploit-coder`) specifically fine-tuned on offensive security concepts, exploit development, and OPSEC bypassing techniques to replace general-purpose coding models.
 *   **Multi-Platform Support:** Expanding the Docker Sandbox compilation mechanisms to autonomously cross-compile exploits for esoteric architectures (MIPS, ARM) alongside standard x86/x64 binaries.
 
@@ -356,7 +356,7 @@ docker run -it --rm --network host \
 ## Gelecek Planları ve Yol Haritası (Roadmap)
 
 OffSploit'in gelişimi hız kesmeden devam etmektedir. Gelecek sürümler için planlanan bazı temel özellikler şunlardır:
-*   **Derin Active Directory Entegrasyonu:** Yalnızca BloodHound haritalamasıyla sınırlı kalmayıp; otomatik Kerberos istismarları (AS-REP Roasting, Kerberoasting), Impacket modüllerinin otonom kullanımı ve AD yetki yükseltme vektörlerinin RAG motoruna dahil edilmesi.
+*   **Gelişmiş Active Directory Analizi:** BloodHound grafik ayrıştırma yeteneklerinin genişletilerek daha karmaşık saldırı yollarının teorik olarak tespit edilmesi ve RAG motorunun AD güvenlik makalelerini okuyarak kullanıcıya rehberlik sağlaması.
 *   **OffSploit LLM Fine-Tuning:** Sadece ofansif güvenlik, exploit geliştirme ve OPSEC atlatma teknikleri üzerine özel olarak eğitilmiş, genel amaçlı kodlama modellerinin (qwen/llama) yerini alacak `offsploit-coder` adlı amaca yönelik (domain-specific) bir yapay zeka modelinin geliştirilmesi ve yayınlanması.
 *   **Çoklu Platform Desteği:** Docker Sandbox derleme mekanizmalarını genişleterek, standart x86/x64 hedeflerinin yanı sıra otonom olarak MIPS, ARM gibi mimariler için cross-compile exploit üretebilme yeteneği.
 
