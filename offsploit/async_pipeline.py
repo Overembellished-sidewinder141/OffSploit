@@ -207,7 +207,7 @@ class AsyncOffSploitPipeline:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         processed = []
-        for i, result in enumerate(results):
+        for _i, result in enumerate(results):
             if isinstance(result, Exception):
                 processed.append({
                     "success": False,

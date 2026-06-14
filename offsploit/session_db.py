@@ -6,6 +6,7 @@ Pipeline oturumlarını ve adım loglarını SQLite veritabanına
 kaydeden modül. Thread-safe, hafif ve harici bağımlılık gerektirmez.
 """
 
+import contextlib
 import json
 import logging
 import sqlite3
@@ -161,10 +162,8 @@ class SessionManager:
 
         result = dict(row)
         if result.get("config_snapshot"):
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 result["config_snapshot"] = json.loads(result["config_snapshot"])
-            except json.JSONDecodeError:
-                pass
         return result
 
     def get_all_sessions(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -187,10 +186,8 @@ class SessionManager:
         for row in rows:
             d = dict(row)
             if d.get("config_snapshot"):
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     d["config_snapshot"] = json.loads(d["config_snapshot"])
-                except json.JSONDecodeError:
-                    pass
             results.append(d)
         return results
 
@@ -310,10 +307,8 @@ class SessionManager:
         for row in rows:
             d = dict(row)
             if d.get("metadata"):
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     d["metadata"] = json.loads(d["metadata"])
-                except json.JSONDecodeError:
-                    pass
             results.append(d)
         return results
 
