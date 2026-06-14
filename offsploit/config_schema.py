@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from offsploit.exceptions import ConfigError
 

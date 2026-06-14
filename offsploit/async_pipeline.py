@@ -15,7 +15,6 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from offsploit.config_schema import OffSploitConfig

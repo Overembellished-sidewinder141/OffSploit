@@ -30,8 +30,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import contextlib
 
-from offsploit.chromadb_ingest import Ingestor
 from offsploit.async_pipeline import AsyncOffSploitPipeline
+from offsploit.chromadb_ingest import Ingestor
 from offsploit.llm_client import LLMClient
 from offsploit.rag_engine import OffSploitRAG
 from offsploit.session_db import SessionManager
@@ -411,7 +411,7 @@ def handle_run_pipeline(data: dict):
 
         def check_cancel() -> bool:
             return cancel_flags.get(task_id, False)
-            
+
         session_id = session_manager.create_session(
             target_ip=rhost,
             config=cfg
@@ -425,7 +425,7 @@ def handle_run_pipeline(data: dict):
                 "type": event_type,
                 "data": event_data
             })
-            
+
             # Veritabani loglama
             if event_type == "step_start":
                 step_name = event_data.get("message", event_data.get("step"))
@@ -461,14 +461,14 @@ def handle_run_pipeline(data: dict):
                 pipeline = AsyncOffSploitPipeline(cfg, on_event, check_cancel)
                 # Ensure session ID matches DB
                 pipeline._session_id = session_id
-                
+
                 # Sadece asenkron run cagirilir. Evazyon vb ileride eklenebilir.
                 result = await pipeline.run(
                     nmap_xml=nmap_path,
                     lhost=lhost,
                     lport=lport,
                 )
-                
+
                 if not result.get("success"):
                     session_manager.finish_session(session_id, status="failed")
                     socketio.emit("pipeline_complete", {"success": False, "message": result.get("error")})
