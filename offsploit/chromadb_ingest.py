@@ -10,6 +10,7 @@ exploit kaynak kodunun ilk bölümünü composite text'e dahil eder.
 import contextlib
 import json
 import logging
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -101,6 +102,66 @@ class Ingestor:
         except Exception:
             return ""
 
+    # ── Metadata Yardımcıları ──
+
+    @staticmethod
+    def _detect_language(file_path: str) -> str:
+        """Dosya uzantısından programlama dilini tespit eder.
+
+        Args:
+            file_path: Exploit dosya yolu (relative).
+
+        Returns:
+            Tespit edilen dil adı (C, C++, Python, Ruby, Perl, Bash, vb.)
+        """
+        ext_map = {
+            ".c": "C",
+            ".h": "C",
+            ".cpp": "C++",
+            ".cc": "C++",
+            ".cxx": "C++",
+            ".py": "Python",
+            ".rb": "Ruby",
+            ".pl": "Perl",
+            ".sh": "Bash",
+            ".java": "Java",
+            ".js": "JavaScript",
+            ".php": "PHP",
+            ".go": "Go",
+            ".rs": "Rust",
+            ".txt": "Text",
+            ".html": "HTML",
+            ".xml": "XML",
+            ".asm": "Assembly",
+        }
+        if not file_path:
+            return "Unknown"
+        suffix = Path(file_path).suffix.lower()
+        return ext_map.get(suffix, "Unknown")
+
+    @staticmethod
+    def _extract_version(description: str) -> str:
+        """Açıklama metninden servis versiyonunu regex ile çıkarır.
+
+        Args:
+            description: Exploit açıklama metni.
+
+        Returns:
+            Bulunan versiyon string'i veya boş string.
+        """
+        if not description:
+            return ""
+        # Versiyon pattern'leri: "Apache 2.4.49", "OpenSSH 7.2p2", "< 3.0.1" vb.
+        patterns = [
+            r'(\d+\.\d+(?:\.\d+)+(?:[a-zA-Z]\d*)?)',  # 2.4.49, 7.2p2
+            r'(\d+\.\d+)',  # 2.4, 7.2
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, description)
+            if match:
+                return match.group(1)
+        return ""
+
     # ── CSV İşlemleri ──
 
     def read_csv(self) -> pd.DataFrame:
@@ -177,6 +238,8 @@ class Ingestor:
                     "platform": str(row.get("platform", "")),
                     "type": str(row.get("type", "")),
                     "exploit_id": str(row.get("id", "")),
+                    "language": self._detect_language(str(row.get("file", ""))),
+                    "service_version": self._extract_version(str(row.get("description", ""))),
                 }
                 for _, row in chunk.iterrows()
             ]

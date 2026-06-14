@@ -12,6 +12,7 @@ import logging
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from offsploit.llm_client import LLMClient
 from offsploit.nmap_parser import NmapParser
@@ -32,8 +33,15 @@ class OffSploitPipeline:
         - Otonom Pivoting State Machine
     """
 
-    def __init__(self, config: dict, on_event: Callable[[str, dict], None], cancel_check: Callable[[], bool] = None):
-        self.config = config
+    def __init__(self, config: dict[str, Any] | Any, on_event: Callable[[str, dict], None], cancel_check: Callable[[], bool] = None):
+        # OffSploitConfig veya dict kabul et (geriye uyumluluk)
+        if hasattr(config, "to_dict"):
+            # OffSploitConfig nesnesi
+            self.config = config.to_dict()
+        elif isinstance(config, dict):
+            self.config = config
+        else:
+            self.config = dict(config)
         self.on_event = on_event
         self.cancel_check = cancel_check or (lambda: False)
 

@@ -31,9 +31,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import contextlib
 
 from offsploit.chromadb_ingest import Ingestor
-from offsploit.core_pipeline import OffSploitPipeline
+from offsploit.async_pipeline import AsyncOffSploitPipeline
 from offsploit.llm_client import LLMClient
 from offsploit.rag_engine import OffSploitRAG
+from offsploit.session_db import SessionManager
 
 logger = logging.getLogger("offsploit.web")
 
@@ -69,22 +70,31 @@ DEFAULT_CONFIG: dict[str, Any] = {
 # Config Manager
 
 class ConfigManager:
-    """JSON tabanli kalici ayar yoneticisi."""
+    """JSON tabanli kalici ayar yoneticisi (Pydantic doğrulamalı)."""
 
     def __init__(self, config_path: str = "config.json") -> None:
         root_dir = Path(__file__).parent.parent
         self.config_path: Path = root_dir / config_path
         self.config: dict[str, Any] = {}
+        self._validated: bool = False
         self.load()
 
     def load(self) -> None:
         if self.config_path.exists():
             try:
-                self.config = json.loads(
+                raw = json.loads(
                     self.config_path.read_text(encoding="utf-8")
                 )
-            except Exception:
+                # Pydantic ile doğrula
+                from offsploit.config_schema import OffSploitConfig
+                validated = OffSploitConfig.from_dict(raw)
+                self.config = validated.to_dict()
+                self._validated = True
+                logger.info("Config doğrulaması başarılı (Pydantic).")
+            except Exception as e:
+                logger.warning("Config doğrulama hatası: %s — Varsayılan değerler kullanılacak.", e)
                 self.config = DEFAULT_CONFIG.copy()
+                self._validated = False
         else:
             self.config = DEFAULT_CONFIG.copy()
             self.save()
@@ -103,12 +113,24 @@ class ConfigManager:
 
     def update(self, data: dict[str, Any]) -> None:
         self.config.update(data)
+        # Güncelleme sonrası yeniden doğrula
+        try:
+            from offsploit.config_schema import OffSploitConfig
+            validated = OffSploitConfig.from_dict(self.config)
+            self.config = validated.to_dict()
+            self._validated = True
+        except Exception as e:
+            logger.warning("Güncelleme sonrası doğrulama hatası: %s", e)
         self.save()
 
     def to_dict(self) -> dict[str, Any]:
         merged = DEFAULT_CONFIG.copy()
         merged.update(self.config)
         return merged
+
+    @property
+    def is_validated(self) -> bool:
+        return self._validated
 
 
 # Socket.IO Log Handler
@@ -160,8 +182,9 @@ metrics_thread.start()
 pty_process = None
 pty_thread = None
 
-# --- Config Manager ---
+# --- Config Manager & Session Manager ---
 config_manager = ConfigManager()
+session_manager = SessionManager()
 operation_history: list[dict[str, Any]] = []
 cancel_flags: dict[str, bool] = {}
 
@@ -319,8 +342,16 @@ def get_db_stats():
 
 @app.route("/api/history")
 def get_history():
-    """Gecmis islem kayitlarini dondurur."""
-    return jsonify(operation_history[-50:])
+    """Gecmis islem kayitlarini session_db'den dondurur."""
+    sessions = session_manager.get_all_sessions(limit=50)
+    return jsonify(sessions)
+
+
+@app.route("/api/session/<session_id>/steps")
+def get_session_steps(session_id: str):
+    """Bir oturumun loglanmis adimlarini dondurur."""
+    steps = session_manager.get_steps(session_id)
+    return jsonify({"session_id": session_id, "steps": steps})
 
 
 # Socket.IO Event Handlers
@@ -367,7 +398,7 @@ def handle_upload_nmap(data: dict):
 
 @socketio.on("run_pipeline")
 def handle_run_pipeline(data: dict):
-    """Tam exploit pipeline'ini arkaplan thread'inde calistirir."""
+    """Tam exploit pipeline'ini arkaplan thread'inde (asyncio ile) calistirir."""
     task_id = str(uuid.uuid4())[:8]
     cancel_flags[task_id] = False
 
@@ -377,82 +408,84 @@ def handle_run_pipeline(data: dict):
         lhost: str = data.get("lhost", "")
         rhost: str = data.get("rhost", "")
         lport: str = data.get("lport", "4444")
-        model: str = data.get("model", cfg["ollama_model"])
-        top_k: int = int(data.get("top_k", cfg["top_k"]))
 
         def check_cancel() -> bool:
             return cancel_flags.get(task_id, False)
+            
+        session_id = session_manager.create_session(
+            target_ip=rhost,
+            config=cfg
+        )
+        # Store step IDs mapped by step_type for updating
+        active_steps = {}
 
         def on_event(event_type: str, event_data: dict):
+            # WebSocket yayini
+            socketio.emit("pipeline_event", {
+                "type": event_type,
+                "data": event_data
+            })
+            
+            # Veritabani loglama
             if event_type == "step_start":
-                socketio.emit("pipeline_step", {
-                    "step": event_data.get("step"),
-                    "name": event_data.get("name"),
-                    "status": "running"
-                })
-                socketio.sleep(0.1)
-            elif event_type == "step_done":
-                socketio.emit("pipeline_step", {
-                    "step": event_data.get("step"),
-                    "name": event_data.get("name"),
-                    "status": "done",
-                    "data": event_data.get("data")
-                })
-                socketio.sleep(0.1)
-            elif event_type == "step_warning":
-                socketio.emit("pipeline_step", {
-                    "step": event_data.get("step"),
-                    "name": event_data.get("name"),
-                    "status": "warning",
-                    "message": event_data.get("message")
-                })
-            elif event_type == "step_progress":
-                pass # Optionally handle progress
-            elif event_type == "error":
-                socketio.emit("error", {"message": event_data.get("message")})
-            elif event_type == "complete":
-                socketio.emit("pipeline_complete", event_data)
+                step_name = event_data.get("message", event_data.get("step"))
+                step_type = event_data.get("step", "unknown")
+                step_id = session_manager.log_step(
+                    session_id=session_id,
+                    step_name=step_name,
+                    step_type=step_type,
+                    status="running"
+                )
+                active_steps[step_type] = step_id
 
-                if event_data.get("success"):
-                    exploits = event_data.get("exploits", [])
-                    queries = ", ".join([exp.get("query", "") for exp in exploits])
+            elif event_type == "step_complete":
+                step_type = event_data.get("step")
+                if step_type in active_steps:
+                    session_manager.update_step(
+                        active_steps[step_type],
+                        status="success",
+                        output_summary=event_data.get("message"),
+                        metadata=event_data
+                    )
 
-                    operation_history.append({
-                        "id": task_id,
-                        "type": "pipeline",
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "query": queries,
-                        "exploit": f"{len(exploits)} exploit uyarlandı.",
-                        "output": event_data.get("report_path", ""),
-                        "success": True,
-                    })
+            elif event_type == "pipeline_error":
+                session_manager.finish_session(session_id, status="failed")
 
-        try:
-            pipeline = OffSploitPipeline(cfg, on_event, check_cancel)
-            pipeline.run(
-                nmap_path=nmap_path,
-                lhost=lhost,
-                rhost=rhost,
-                lport=lport,
-                model=model,
-                top_k=top_k,
-                obfuscate=data.get("obfuscate", False),
-                fileless=data.get("fileless", False),
-                ghost=data.get("ghost", False),
-                # v1.0 parameters
-                evasion=data.get("evasion", False),
-                evasion_level=data.get("evasion_level", cfg.get("evasion_level", "advanced")),
-                payload_inject=data.get("payload_inject", False),
-                payload_type=data.get("payload_type", "reverse_tcp"),
-                use_swarm=data.get("use_swarm", cfg.get("use_swarm", False)),
-                use_docker=data.get("use_docker", cfg.get("use_docker_sandbox", False)),
-            )
-        except Exception as exc:
-            import traceback
-            error_trace = traceback.format_exc()
-            logger.critical("Pipeline thread hatasi: %s\n%s", exc, error_trace)
-            socketio.emit("error", {"message": f"{str(exc)} \n\nDetails: {error_trace}"})
-            socketio.emit("pipeline_complete", {"success": False, "message": str(exc)})
+            elif event_type == "pipeline_complete":
+                session_manager.finish_session(session_id, status="completed")
+
+            socketio.sleep(0)  # Yield for eventlet/gevent
+
+        async def run_async_pipeline():
+            try:
+                pipeline = AsyncOffSploitPipeline(cfg, on_event, check_cancel)
+                # Ensure session ID matches DB
+                pipeline._session_id = session_id
+                
+                # Sadece asenkron run cagirilir. Evazyon vb ileride eklenebilir.
+                result = await pipeline.run(
+                    nmap_xml=nmap_path,
+                    lhost=lhost,
+                    lport=lport,
+                )
+                
+                if not result.get("success"):
+                    session_manager.finish_session(session_id, status="failed")
+                    socketio.emit("pipeline_complete", {"success": False, "message": result.get("error")})
+                else:
+                    socketio.emit("pipeline_complete", result)
+
+            except Exception as exc:
+                import traceback
+                error_trace = traceback.format_exc()
+                logger.critical("Pipeline thread hatasi: %s\n%s", exc, error_trace)
+                session_manager.finish_session(session_id, status="failed")
+                socketio.emit("error", {"message": f"{str(exc)} \n\nDetails: {error_trace}"})
+                socketio.emit("pipeline_complete", {"success": False, "message": str(exc)})
+
+        # Run asyncio event loop inside this thread
+        import asyncio
+        asyncio.run(run_async_pipeline())
 
     thread = threading.Thread(target=pipeline_worker, daemon=True)
     thread.start()

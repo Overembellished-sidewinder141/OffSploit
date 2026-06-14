@@ -12,6 +12,11 @@ from pathlib import Path
 import requests
 
 from offsploit.response_parser import extract_code_from_response
+from offsploit.structured_output import (
+    get_exploit_json_schema_prompt,
+    parse_exploit_output,
+    parse_fix_output,
+)
 
 logger = logging.getLogger("offsploit.llm")
 
@@ -37,7 +42,7 @@ class OllamaProvider(LLMProviderInterface):
         except Exception:
             return False
 
-    def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.1, max_tokens: int = 4096) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.1, max_tokens: int = 4096, format: str | None = None) -> str:
         payload = {
             "model": self.model,
             "system": system_prompt,
@@ -45,6 +50,8 @@ class OllamaProvider(LLMProviderInterface):
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
+        if format:
+            payload["format"] = format
         api_url = f"{self.base_url}/api/generate"
         try:
             resp = requests.post(api_url, json=payload, timeout=self.timeout)
@@ -159,10 +166,20 @@ class LLMClient:
     def adapt_exploit(self, exploit_code: str, lhost: str, rhost: str, lport: str, model_override: str | None = None) -> str:
         logger.info(f"LLM uyarlama başlıyor — Provider: {self.provider_name} | LHOST={lhost} RHOST={rhost} LPORT={lport}")
         system_prompt = self._build_system_prompt(lhost, rhost, lport)
-        user_prompt = f"İşte düzenlenmesi gereken exploit kaynak kodu:\n\n```\n{exploit_code}\n```"
+        schema_hint = get_exploit_json_schema_prompt()
+        user_prompt = f"İşte düzenlenmesi gereken exploit kaynak kodu:\n\n```\n{exploit_code}\n```{schema_hint}"
         try:
-            resp = self.provider.generate(system_prompt, user_prompt, temperature=0.1)
-            return extract_code_from_response(resp)
+            # Ollama provider ise JSON formatı zorla
+            format_param = "json" if self.provider_name == "ollama" else None
+            resp = self.provider.generate(
+                system_prompt, user_prompt, temperature=0.1,
+                **({"format": format_param} if format_param and hasattr(self.provider, 'generate') else {})
+            )
+            # Structured output ile parse et (fallback destekli)
+            code, target_arch, required_libs = parse_exploit_output(resp)
+            if required_libs:
+                logger.info("Gerekli kütüphaneler: %s | Hedef mimari: %s", required_libs, target_arch)
+            return code
         except Exception as e:
             logger.error(f"LLM Adaptasyon hatası: {e}")
             raise
@@ -172,7 +189,7 @@ class LLMClient:
         user_prompt = f"İşte hatalı kaynak kod:\n```c\n{faulty_code}\n```\n\nAlınan Derleyici Hatası:\n```\n{compiler_error}\n```\n\nLütfen kodu düzelt ve sadece güncellenmiş tam kodu ver."
         try:
             resp = self.provider.generate(system_prompt, user_prompt, temperature=0.1)
-            return extract_code_from_response(resp)
+            return parse_fix_output(resp)
         except Exception as e:
             logger.error(f"LLM onarım hatası: {e}")
             return ""

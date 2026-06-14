@@ -42,6 +42,9 @@ OffSploit ingests both Nmap service data and BloodHound (Active Directory) JSON 
 ### 6. State Machine & Autonomous Pivoting
 Utilizing a NetworkX-based state machine, the framework tracks compromised assets as `PivotNodes`. Based on the current network topology and accumulated credentials, it calculates and recommends the next optimal strategic objective (e.g., Lateral Movement vs. Privilege Escalation).
 
+### 7. Asynchronous Execution & Real-Time Tracking
+The entire exploit pipeline runs asynchronously (`asyncio`) with a dedicated LLM Task Queue to prevent Out-Of-Memory (OOM) crashes on consumer hardware. Every execution step is logged locally via a thread-safe SQLite Session Database (`session_db`), and events are broadcasted in real-time to the web dashboard via Socket.IO, animating a dynamic `vis.js` network topology graph.
+
 ---
 
 ## Prerequisites & Installation
@@ -225,6 +228,9 @@ OffSploit, hem Nmap servis verilerini hem de BloodHound (Active Directory) JSON 
 
 ### 6. State Machine & Otonom Pivoting
 NetworkX tabanlı bir durum makinesi (state machine) kullanarak, çerçeve ele geçirilen varlıkları `PivotNodes` olarak izler. Mevcut ağ topolojisi ve toplanan kimlik bilgilerine dayanarak, bir sonraki optimal stratejik hedefi (örn. Yanal Hareket'e karşı Yetki Yükseltme) otonom olarak hesaplar ve önerir.
+
+### 7. Asenkron Mimari ve Gerçek Zamanlı İzleme
+Tüm exploit boru hattı asenkron (`asyncio`) çalışır ve kısıtlı donanımlarda VRAM taşmalarını (OOM) önlemek için LLM isteklerini özel bir kuyrukta (Queue) sıralı işler. İşlemin her aşaması SQLite tabanlı bir Oturum Veritabanına (`session_db`) kaydedilirken, olaylar anlık olarak Web arayüzüne Socket.IO ile iletilerek `vis.js` destekli dinamik ağ topolojisi üzerinde görselleştirilir.
 
 ---
 

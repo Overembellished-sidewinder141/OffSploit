@@ -47,7 +47,7 @@ class EmbeddingProvider(ABC):
 class OllamaEmbeddingProvider(EmbeddingProvider):
     """Ollama API üzerinden embedding üretir (nomic-embed-text, jina vb.)."""
 
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "nomic-embed-text", timeout: int = 120):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "mxbai-embed-large", timeout: int = 120):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
@@ -76,9 +76,28 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             logger.error("Ollama embedding hatası: %s", e)
             raise RAGSearchError(f"Ollama embedding hatası: {e}") from e
 
+    def _get_document_prefix(self) -> str:
+        """Model adına göre döküman embedding prefix'i döndürür."""
+        model_lower = self.model.lower()
+        if "nomic" in model_lower:
+            return "search_document: "
+        elif "mxbai" in model_lower:
+            return "Represent this sentence for searching relevant passages: "
+        return ""
+
+    def _get_query_prefix(self) -> str:
+        """Model adına göre sorgu embedding prefix'i döndürür."""
+        model_lower = self.model.lower()
+        if "nomic" in model_lower:
+            return "search_query: "
+        elif "mxbai" in model_lower:
+            return "Represent this sentence for searching relevant passages: "
+        return ""
+
     def encode(self, texts: list[str]) -> list[list[float]]:
-        """Döküman metinlerini embedding'e çevirir. nomic-embed-text prefix: 'search_document: '"""
-        prefixed = [f"search_document: {t}" for t in texts]
+        """Döküman metinlerini embedding'e çevirir. Model'e göre uygun prefix eklenir."""
+        prefix = self._get_document_prefix()
+        prefixed = [f"{prefix}{t}" for t in texts]
         # Batch halinde işle (Ollama API batch destekler)
         batch_size = 64
         all_embeddings: list[list[float]] = []
@@ -89,8 +108,9 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         return all_embeddings
 
     def encode_query(self, query: str) -> list[float]:
-        """Sorgu metnini embedding'e çevirir. nomic-embed-text prefix: 'search_query: '"""
-        prefixed = f"search_query: {query}"
+        """Sorgu metnini embedding'e çevirir. Model'e göre uygun prefix eklenir."""
+        prefix = self._get_query_prefix()
+        prefixed = f"{prefix}{query}"
         embeddings = self._call_api([prefixed])
         if embeddings:
             return embeddings[0]
@@ -252,13 +272,15 @@ class OffSploitRAG:
 
     # ── Arama API'leri ──
 
-    def search(self, query: str, top_k: int | None = None, collection_name: str | None = None) -> list[ExploitMatch]:
+    def search(self, query: str, top_k: int | None = None, collection_name: str | None = None, where: dict | None = None) -> list[ExploitMatch]:
         """Tek bir servis sorgusu için ChromaDB'de semantik arama yapar.
 
         Args:
             query:  Aranacak metin (örn. "vsftpd 2.3.4").
             top_k:  Döndürülecek sonuç sayısı (varsayılan: self.top_k).
             collection_name: Aranacak koleksiyon adı (varsayılan: self.collection_name).
+            where: ChromaDB metadata filtresi (opsiyonel).
+                   Örn: {"platform": "Windows"} veya {"language": "Python"}
 
         Returns:
             ExploitMatch nesnelerinin listesi (mesafeye göre sıralı).
@@ -266,14 +288,17 @@ class OffSploitRAG:
         k: int = top_k if top_k is not None else self.top_k
         collection = self._get_collection(collection_name)
 
-        logger.info('Sorgulanıyor: "%s" (top_k=%d, collection=%s)', query, k, collection_name or self.collection_name)
+        logger.info('Sorgulanıyor: "%s" (top_k=%d, collection=%s, where=%s)', query, k, collection_name or self.collection_name, where)
 
         try:
             query_embedding = self._provider.encode_query(query)
-            results: dict[str, Any] = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=k,
-            )
+            query_params: dict[str, Any] = {
+                "query_embeddings": [query_embedding],
+                "n_results": k,
+            }
+            if where:
+                query_params["where"] = where
+            results: dict[str, Any] = collection.query(**query_params)
         except Exception as exc:
             logger.error("ChromaDB sorgu hatası: %s", exc, exc_info=True)
             return []

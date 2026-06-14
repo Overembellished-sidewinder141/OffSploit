@@ -88,10 +88,19 @@ class DockerSandbox:
 
     Güvenlik önlemleri:
         - Ağ erişimi yok (network_mode=none)
+        - Tüm Linux capabilities kaldırılır (cap_drop=ALL)
+        - Yeni privilege kazanımı engellenir (no-new-privileges)
+        - PID limiti (varsayılan 100)
         - Bellek limiti (varsayılan 256m)
         - CPU limiti (varsayılan 0.5 core)
         - Zaman aşımı desteği
     """
+
+    # ── Güvenlik Sabitleri (asla değiştirilmemeli) ──
+    _SECURITY_CAP_DROP: list[str] = ["ALL"]
+    _SECURITY_NETWORK_MODE: str = "none"
+    _SECURITY_OPT: list[str] = ["no-new-privileges:true"]
+    _SECURITY_PIDS_LIMIT: int = 100
 
     def __init__(
         self,
@@ -123,6 +132,33 @@ class DockerSandbox:
                     detail="Docker servisinin çalıştığından emin olun."
                 ) from exc
         return self._client
+
+    def _create_container_kwargs(self, image: str, command: str) -> dict:
+        """Container oluşturma parametrelerini tek noktadan üretir.
+
+        Güvenlik parametreleri burada zorunlu olarak eklenir.
+        Bu metod sayesinde güvenlik ayarları asla atlanmaz (DRY).
+
+        Args:
+            image: Docker imaj adı.
+            command: Container'da çalışacak komut.
+
+        Returns:
+            docker.containers.create() için kwargs dict'i.
+        """
+        return {
+            "image": image,
+            "command": f'/bin/bash -c "{command}"',
+            "network_mode": self._SECURITY_NETWORK_MODE,
+            "cap_drop": self._SECURITY_CAP_DROP,
+            "security_opt": self._SECURITY_OPT,
+            "pids_limit": self._SECURITY_PIDS_LIMIT,
+            "mem_limit": self.memory_limit,
+            "nano_cpus": int(self.cpu_limit * 1e9),
+            "detach": True,
+            "stdin_open": False,
+            "tty": False,
+        }
 
     def is_available(self) -> bool:
         """Docker daemon'ın erişilebilir olup olmadığını kontrol eder."""
@@ -158,29 +194,13 @@ class DockerSandbox:
 
             # Container oluştur (henüz başlatılmadı)
             try:
-                container = client.containers.create(
-                    image=image,
-                    command=f'/bin/bash -c "{command}"',
-                    network_mode="none",
-                    mem_limit=self.memory_limit,
-                    nano_cpus=int(self.cpu_limit * 1e9),
-                    detach=True,
-                    stdin_open=False,
-                    tty=False,
-                )
+                kwargs = self._create_container_kwargs(image, command)
+                container = client.containers.create(**kwargs)
             except _get_docker().errors.ImageNotFound:
                 logger.info("İmaj bulunamadı, çekiliyor: %s", image)
                 client.images.pull(image)
-                container = client.containers.create(
-                    image=image,
-                    command=f'/bin/bash -c "{command}"',
-                    network_mode="none",
-                    mem_limit=self.memory_limit,
-                    nano_cpus=int(self.cpu_limit * 1e9),
-                    detach=True,
-                    stdin_open=False,
-                    tty=False,
-                )
+                kwargs = self._create_container_kwargs(image, command)
+                container = client.containers.create(**kwargs)
 
             # Dosyayı tar arşivine çevir ve container içine kopyala
             tar_stream = io.BytesIO()

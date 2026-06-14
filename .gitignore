@@ -34,6 +34,7 @@ output/
 config.json
 *.log
 logs/
+offsploit_sessions.db*
 
 # Exploit-DB
 # ExploitDB reposu çok büyük olduğu için ana repoya dahil edilmemeli

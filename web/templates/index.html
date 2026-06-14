@@ -578,24 +578,60 @@
 
       state.socket.on('task_started', (data) => {
         state.pipelineTaskId = data.task_id;
+        state.topologyData = {
+          nodes: [
+            { id: 1, label: 'LHOST\n(Attacker)', title: document.getElementById('pipeline-lhost').value, color: '#10b981', font: { color: '#ffffff' }, shape: 'diamond' },
+            { id: 2, label: 'RHOST\n(Target)', title: document.getElementById('pipeline-rhost').value, color: '#ef4444', font: { color: '#ffffff' }, shape: 'dot' }
+          ],
+          edges: [
+            { from: 1, to: 2, label: 'Nmap Scan', color: '#6b7280', arrows: 'to', dashes: true }
+          ]
+        };
+        drawTopology();
       });
 
-      state.socket.on('pipeline_step', (data) => {
-        updatePipelineStep(data);
-      });
-
-      state.socket.on('pipeline_complete', (data) => {
-        state.pipelineRunning = false;
-        document.getElementById('btn-run-pipeline').disabled = false;
-        document.getElementById('btn-cancel-pipeline').classList.add('hidden');
-
-        if (data.success) {
-          showToast('Pipeline basariyla tamamlandi!', 'success');
-          showPipelineResult(data);
-        } else {
-          showToast('Pipeline: ' + (data.message || 'Hata'), 'warning');
+      state.socket.on('pipeline_event', (event) => {
+        const type = event.type;
+        const data = event.data || {};
+        
+        if (type === 'step_start') {
+           updatePipelineStep({ step: data.step, name: data.message, status: 'running' });
+        } else if (type === 'step_complete') {
+           updatePipelineStep({ step: data.step, name: data.message, status: 'done', data: data });
+           
+           // Topology Guncelleme
+           if (data.step === 'nmap_parse' && data.target_count) {
+              // Hedef portlari ekle
+              state.topologyData.nodes.push({ id: 3, label: 'Hedef\nServisler', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' });
+              state.topologyData.edges.push({ from: 2, to: 3 });
+              drawTopology();
+           } else if (data.step === 'rag_search' && data.result_count > 0) {
+              state.topologyData.nodes.push({ id: 4, label: 'Bulunan\nExploitler', color: '#f59e0b', font: { color: '#ffffff' }, shape: 'star' });
+              state.topologyData.edges.push({ from: 3, to: 4, label: 'RAG Eşleşmesi' });
+              drawTopology();
+           } else if (data.step === 'llm_adapt') {
+              state.topologyData.nodes.push({ id: 5, label: 'Uyarlanmış\nExploit', color: '#8b5cf6', font: { color: '#ffffff' }, shape: 'diamond' });
+              state.topologyData.edges.push({ from: 4, to: 5, label: 'LLM Kodlama' });
+              state.topologyData.edges.push({ from: 5, to: 2, label: 'Saldırı', color: '#ef4444', arrows: 'to', width: 2 });
+              state.topologyData.edges.push({ from: 2, to: 1, label: 'Reverse Shell', color: '#10b981', arrows: 'to', width: 2, dashes: true });
+              drawTopology();
+           }
+        } else if (type === 'pipeline_error') {
+           showToast('Pipeline Hatasi: ' + data.message, 'error');
+           state.pipelineRunning = false;
+           document.getElementById('btn-run-pipeline').disabled = false;
+           document.getElementById('btn-cancel-pipeline').classList.add('hidden');
+        } else if (type === 'pipeline_complete') {
+           state.pipelineRunning = false;
+           document.getElementById('btn-run-pipeline').disabled = false;
+           document.getElementById('btn-cancel-pipeline').classList.add('hidden');
+           showToast(data.message, 'success');
+           if (data.results && data.results.length > 0) {
+              // Sonucu goster
+              showPipelineResult(data.results[0]);
+           }
+           checkStatus();
         }
-        checkStatus();
       });
 
       state.socket.on('search_status', (data) => {
@@ -835,7 +871,16 @@
     }
 
     function updatePipelineStep(data) {
-      const stepEl = document.querySelector('.pipeline-step[data-step="' + data.step + '"]');
+      // step_name to ID map (nmap_parse -> 1, rag_search -> 2, llm_adapt -> 3, docker_compile -> 4)
+      const stepMap = {
+         'nmap_parse': 1,
+         'rag_search': 2,
+         'llm_adapt': 3,
+         'docker_compile': 4
+      };
+      
+      const stepId = stepMap[data.step] || parseInt(data.step);
+      const stepEl = document.querySelector('.pipeline-step[data-step="' + stepId + '"]');
       if (!stepEl) return;
 
       stepEl.className = 'pipeline-step ' + data.status;
@@ -849,33 +894,18 @@
       let infoHtml = '';
 
       if (data.status === 'done' && data.data) {
-        if (data.step === 1 && Array.isArray(data.data)) {
-          infoHtml = '<div style="font-size:13px; margin-bottom:8px; color:var(--success); font-weight:600;">' + data.data.length + ' acik servis bulundu</div>';
-          infoHtml += '<table class="data-table"><thead><tr><th>Port</th><th>Servis</th></tr></thead><tbody>';
-          data.data.forEach(s => {
-            infoHtml += '<tr><td style="font-family:var(--font-mono);">' + s.port + '/' + s.protocol + '</td><td>' + escHtml(s.query) + '</td></tr>';
-          });
-          infoHtml += '</tbody></table>';
-        } else if (data.step === 2) {
-          const score = Math.max(10, Math.round(100 - (data.data.distance * 100)));
-          const scoreColor = score > 80 ? 'var(--success)' : (score > 50 ? 'var(--warning)' : 'var(--error)');
-          
-          infoHtml = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">';
-          infoHtml += '<div style="font-size:13px; color:var(--success); font-weight:600;">Exploit Eslesti</div>';
-          infoHtml += '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Basari Ihtimali</span><div style="background:'+scoreColor+'20; color:'+scoreColor+'; padding:2px 8px; border-radius:12px; font-weight:700; font-size:12px;">%'+score+'</div></div>';
-          infoHtml += '</div>';
-          
-          infoHtml += '<div style="font-size:12px; color:var(--text-secondary); line-height:1.8;">';
-          infoHtml += '<strong>CVE / Ozet:</strong> ' + escHtml(data.data.description || '') + '<br>';
-          infoHtml += '<strong>Dosya:</strong> <span class="text-mono">' + escHtml(data.data.file_path || '') + '</span><br>';
-          infoHtml += '<strong>Platform:</strong> ' + escHtml(data.data.platform || '') + '</div>';
-        } else if (data.step === 4 && data.data.path) {
-          infoHtml = '<div style="font-size:13px; color:var(--success); font-weight:600;">Kaydedildi: <span class="text-mono">' + escHtml(data.data.path) + '</span></div>';
+        if (data.step === 'nmap_parse') {
+          infoHtml = '<div style="font-size:13px; margin-bottom:8px; color:var(--success); font-weight:600;">' + data.data.target_count + ' hedef bulundu</div>';
+        } else if (data.step === 'rag_search') {
+          infoHtml = '<div style="font-size:13px; margin-bottom:8px; color:var(--success); font-weight:600;">' + data.data.result_count + ' exploit bulundu</div>';
+        } else if (data.step === 'llm_adapt') {
+          infoHtml = '<div style="font-size:13px; color:var(--success); font-weight:600;">Exploit Uyarlandı (' + data.data.code_length + ' byte)</div>';
+        } else if (data.step === 'docker_compile') {
+          const successStr = data.data.result && data.data.result.success ? "Basarili" : "Basarisiz";
+          infoHtml = '<div style="font-size:13px; color:var(--success); font-weight:600;">Derleme: ' + successStr + '</div>';
         }
       } else if (data.status === 'running') {
         infoHtml = '<div class="text-center" style="padding:20px;"><span class="spinner lg"></span><p class="mt-16" style="color:var(--accent);">' + escHtml(data.name) + ' calisiyor...</p></div>';
-      } else if (data.status === 'warning') {
-        infoHtml = '<div style="padding:16px; color:var(--warning);"><i data-lucide="alert-triangle" style="width:16px;height:16px;display:inline;"></i> ' + escHtml(data.message || '') + '</div>';
       }
 
       if (infoHtml) infoEl.innerHTML = infoHtml;
@@ -1200,21 +1230,31 @@
       const container = document.getElementById('topology-graph');
       if (!container) return;
 
-      const nodes = new vis.DataSet([
-        { id: 1, label: 'LHOST\n(Attacker)', title: '10.10.14.5', color: '#10b981', font: { color: '#ffffff' }, shape: 'diamond' },
-        { id: 2, label: 'RHOST\n(Target)', title: '10.10.10.3', color: '#ef4444', font: { color: '#ffffff' }, shape: 'dot' },
-        { id: 3, label: 'Port 80\n(Apache)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
-        { id: 4, label: 'Port 445\n(SMB)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
-        { id: 5, label: 'AD Domain\n(HTB.local)', color: '#8b5cf6', font: { color: '#ffffff' }, shape: 'star' }
-      ]);
+      let nodesData, edgesData;
+      if (state.topologyData) {
+          nodesData = state.topologyData.nodes;
+          edgesData = state.topologyData.edges;
+      } else {
+          // Default static topology if none exists yet
+          nodesData = [
+            { id: 1, label: 'LHOST\n(Attacker)', title: '10.10.14.5', color: '#10b981', font: { color: '#ffffff' }, shape: 'diamond' },
+            { id: 2, label: 'RHOST\n(Target)', title: '10.10.10.3', color: '#ef4444', font: { color: '#ffffff' }, shape: 'dot' },
+            { id: 3, label: 'Port 80\n(Apache)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
+            { id: 4, label: 'Port 445\n(SMB)', color: '#3b82f6', font: { color: '#ffffff' }, shape: 'box' },
+            { id: 5, label: 'AD Domain\n(HTB.local)', color: '#8b5cf6', font: { color: '#ffffff' }, shape: 'star' }
+          ];
 
-      const edges = new vis.DataSet([
-        { from: 1, to: 2, label: 'Nmap Scan', color: '#6b7280', arrows: 'to', dashes: true },
-        { from: 2, to: 3 },
-        { from: 2, to: 4 },
-        { from: 3, to: 1, label: 'Reverse Shell', color: '#10b981', arrows: 'to', width: 2 },
-        { from: 4, to: 5, label: 'BloodHound', color: '#8b5cf6', arrows: 'to' }
-      ]);
+          edgesData = [
+            { from: 1, to: 2, label: 'Nmap Scan', color: '#6b7280', arrows: 'to', dashes: true },
+            { from: 2, to: 3 },
+            { from: 2, to: 4 },
+            { from: 3, to: 1, label: 'Reverse Shell', color: '#10b981', arrows: 'to', width: 2 },
+            { from: 4, to: 5, label: 'BloodHound', color: '#8b5cf6', arrows: 'to' }
+          ];
+      }
+
+      const nodes = new vis.DataSet(nodesData);
+      const edges = new vis.DataSet(edgesData);
 
       const data = { nodes: nodes, edges: edges };
       const options = {
